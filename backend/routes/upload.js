@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // backend/routes/upload.js - Enhanced for Large Files
 const express = require('express');
 const multer = require('multer');
@@ -639,3 +640,311 @@ router.get('/history', async (req, res) => {
 });
 
 module.exports = router;
+=======
+// backend/routes/upload.js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
+const { query } = require('../config/database'); // นำเข้า query เพื่อบันทึกลง DB
+const csv = require('csv-parser'); // สำหรับ parse CSV
+const { Readable } = require('stream'); // สำหรับแปลง string เป็น stream
+
+const router = express.Router();
+
+// Ensure uploads directory exists
+const ensureUploadDir = async () => {
+  const uploadDir = path.join(__dirname, '../uploads');
+  try {
+    await fs.access(uploadDir);
+  } catch {
+    await fs.mkdir(uploadDir, { recursive: true });
+  }
+  return uploadDir;
+};
+
+// Multer configuration
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    try {
+      const uploadDir = await ensureUploadDir();
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(error);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    cb(null, 'log-' + uniqueSuffix + extension);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.txt', '.log', '.csv'];
+    const fileExt = path.extname(file.originalname).toLowerCase();
+
+    if (allowedTypes.includes(fileExt)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only .txt, .log, .csv files are allowed.'));
+    }
+  }
+});
+
+// Function to parse CSV content and insert into database
+const processCsvToDatabase = async (filePath, fileName) => {
+  const records = [];
+  const fileContent = await fs.readFile(filePath, 'utf8');
+
+  // Use csv-parser to parse the content
+  const stream = Readable.from(fileContent);
+  await new Promise((resolve, reject) => {
+    stream
+      .pipe(csv({
+        headers: [
+          'Column1', 'Date Time', 'day', 'month', 'year', 'year_mm', 'Column7',
+          'Transaction ID', 'Door', 'Device', 'Location', 'Direction', 'Allow',
+          'Reason', 'Channel', 'Card Name', 'Card Number Hash', 'ID Hash',
+          'User Hash', 'User Type', 'Permission', 'Temp.'
+        ], // กำหนด headers ตามโครงสร้างข้อมูลที่คุณให้มา
+        skipLines: 0 // ถ้ามี header row ให้ skip 1 บรรทัด
+      }))
+      .on('data', (data) => {
+        // Map data to match your database columns and prepare for insertion
+        // ตัวอย่าง: 4	10/3/2025 12:01:07	10	3	2025	2025_03	10/3/2025 00:00:00	67ce721467f40ba8458f30f3	NNN0801	NFL801IN	สำนักงานใหญ่ อาคาร 1 (นานาเหนือ) ชั้น 8	IN	t	Verify Success	QR			00000K40	00006H5R	EMPLOYEE	General Permission Group
+        const row = {
+          file: fileName,
+          // แก้ไข: ไม่ต้องแปลงเป็น ISO string ที่นี่ ปล่อยให้ PostgreSQL จัดการรูปแบบ DD/MM/YYYY ด้วย datestyle
+          dateTime: data['Date Time'] || null,
+          day: parseInt(data['day']) || null,
+          month: parseInt(data['month']) || null,
+          year: parseInt(data['year']) || null,
+          year_mm: data['year_mm'] || null,
+          transactionId: data['Transaction ID'] || null,
+          door: data['Door'] || null,
+          device: data['Device'] || null,
+          location: data['Location'] || null,
+          direction: data['Direction'] || null,
+          allow: data['Allow'] === 't' ? 't' : 'f', // ตรวจสอบค่า 't'/'f'
+          reason: data['Reason'] || null,
+          channel: data['Channel'] || null,
+          cardName: data['Card Name'] || null,
+          cardNumberHash: data['Card Number Hash'] || null,
+          idHash: data['ID Hash'] || null,
+          userHash: data['User Hash'] || null,
+          userType: data['User Type'] || null,
+          permission: data['Permission'] || null,
+          temp: parseFloat(data['Temp.']) || null,
+        };
+        records.push(row);
+      })
+      .on('end', resolve)
+      .on('error', reject);
+  });
+
+  if (records.length === 0) {
+    console.warn('⚠️ No records parsed from CSV file.');
+    return 0;
+  }
+
+  // Insert records into PostgreSQL
+  const client = await query.getClient(); // รับ client จาก pg-pool
+  try {
+    await client.query('BEGIN'); // เริ่มต้น transaction
+
+    const insertQuery = `
+      INSERT INTO "public"."real_log_analyze" (
+        file, "Date Time", day, month, year, year_mm,
+        "Transaction ID", "Door", "Device", "Location", "Direction", "Allow",
+        "Reason", "Channel", "Card Name", "Card Number Hash", "ID Hash",
+        "User Hash", "User Type", "Permission", "Temp."
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+      )
+      ON CONFLICT ("Transaction ID") DO UPDATE SET
+        file = EXCLUDED.file,
+        "Date Time" = EXCLUDED."Date Time",
+        day = EXCLUDED.day,
+        month = EXCLUDED.month,
+        year = EXCLUDED.year,
+        year_mm = EXCLUDED.year_mm,
+        "Door" = EXCLUDED."Door",
+        "Device" = EXCLUDED."Device",
+        "Location" = EXCLUDED."Location",
+        "Direction" = EXCLUDED."Direction",
+        "Allow" = EXCLUDED."Allow",
+        "Reason" = EXCLUDED."Reason",
+        "Channel" = EXCLUDED."Channel",
+        "Card Name" = EXCLUDED."Card Name",
+        "Card Number Hash" = EXCLUDED."Card Number Hash",
+        "ID Hash" = EXCLUDED."ID Hash",
+        "User Hash" = EXCLUDED."User Hash",
+        "User Type" = EXCLUDED."User Type",
+        "Permission" = EXCLUDED."Permission",
+        "Temp." = EXCLUDED."Temp."
+    `;
+
+    for (const record of records) {
+      await client.query(insertQuery, [
+        record.file, record.dateTime, record.day, record.month, record.year, record.year_mm,
+        record.transactionId, record.door, record.device, record.location, record.direction, record.allow,
+        record.reason, record.channel, record.cardName, record.cardNumberHash, record.idHash,
+        record.userHash, record.userType, record.permission, record.temp
+      ]);
+    }
+
+    await client.query('COMMIT'); // สิ้นสุด transaction
+    return records.length;
+
+  } catch (error) {
+    await client.query('ROLLBACK'); // Rollback หากเกิดข้อผิดพลาด
+    throw error;
+  } finally {
+    client.release(); // คืน client กลับสู่ pool
+  }
+};
+
+// POST /api/upload-log - Upload log file
+router.post('/', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'No file uploaded',
+        details: 'Please select a file to upload'
+      });
+    }
+
+    const filePath = req.file.path;
+    const fileName = req.file.originalname;
+    const fileSize = req.file.size;
+
+    console.log(`📁 Processing file: ${fileName} (${fileSize} bytes)`);
+
+    let recordCount = 0;
+    const startTime = process.hrtime.bigint();
+
+    // Process file content and insert into database
+    if (path.extname(fileName).toLowerCase() === '.csv') {
+      recordCount = await processCsvToDatabase(filePath, fileName);
+    } else {
+      // For .txt or .log, you might need a different parser
+      // For now, it will just acknowledge the upload
+      console.warn(`⚠️ File type ${path.extname(fileName)} not fully supported for database insertion. Only CSV is implemented.`);
+      // You can add logic here to parse .txt/.log files if needed
+      recordCount = 0; // Or implement a simple line counter if not parsing deeply
+    }
+
+    const endTime = process.hrtime.bigint();
+    const processingTimeMs = Number(endTime - startTime) / 1_000_000; // Convert nanoseconds to milliseconds
+
+    console.log(`✅ Processed ${recordCount} log entries from ${fileName} in ${processingTimeMs.toFixed(2)} ms`);
+
+    // Clean up uploaded file
+    try {
+      await fs.unlink(filePath);
+      console.log(`🗑️  Cleaned up temporary file: ${filePath}`);
+    } catch (unlinkError) {
+      console.warn('Failed to clean up file:', unlinkError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'File uploaded and processed successfully',
+      recordCount: recordCount,
+      fileName,
+      fileSize,
+      processedAt: new Date().toISOString(),
+      processingTime: `${processingTimeMs.toFixed(2)}ms`
+    });
+
+  } catch (error) {
+    console.error('Upload error:', error);
+
+    // Clean up file if exists
+    if (req.file && req.file.path) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (unlinkError) {
+        console.error('Failed to clean up file after error:', unlinkError);
+      }
+    }
+
+    res.status(500).json({
+      error: 'Upload failed',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/upload-stats - Get upload statistics
+router.get('/stats', async (req, res) => {
+  try {
+    // ดึงข้อมูลสถิติการอัปโหลดจริงจากฐานข้อมูล (ถ้ามีตารางสำหรับเก็บ)
+    // สำหรับตอนนี้ ยังคงใช้ Mock data
+    const stats = {
+      total_files: 23,
+      total_records: 15847,
+      last_upload: new Date().toISOString(),
+      avg_processing_time: 2.3,
+      successful_uploads: 21,
+      failed_uploads: 2,
+      largest_file_size: 45.7, // MB
+      total_data_processed: 123.4 // MB
+    };
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Get upload stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch upload statistics' });
+  }
+});
+
+// GET /api/upload-history - Get upload history
+router.get('/history', async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+
+    // ดึงข้อมูลประวัติการอัปโหลดจริงจากฐานข้อมูล (ถ้ามีตารางสำหรับเก็บ)
+    // สำหรับตอนนี้ ยังคงใช้ Mock history
+    const history = Array.from({ length: 23 }, (_, i) => {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      return {
+        id: i + 1,
+        fileName: `access_log_${date.toISOString().split('T')[0]}.txt`,
+        uploadDate: date.toISOString(),
+        recordCount: Math.floor(Math.random() * 1000) + 100,
+        fileSize: (Math.random() * 10 + 1).toFixed(2) + ' MB',
+        status: Math.random() > 0.1 ? 'success' : 'failed',
+        processingTime: (Math.random() * 5 + 0.5).toFixed(1) + 's'
+      };
+    });
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedHistory = history.slice(startIndex, endIndex);
+
+    res.json({
+      data: paginatedHistory,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: history.length,
+        totalPages: Math.ceil(history.length / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get upload history error:', error);
+    res.status(500).json({ error: 'Failed to fetch upload history' });
+  }
+});
+
+module.exports = router;
+>>>>>>> dccf88c7 (update case)

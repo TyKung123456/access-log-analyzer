@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // components/Upload/UploadPage.jsx - Enhanced with Immediate Client-Side Validation
 import React, { useState, useEffect } from 'react';
 import { Upload, AlertCircle, CheckCircle, FileText, BarChart3, Clock, XCircle } from 'lucide-react';
@@ -234,3 +235,69 @@ const UploadPage = ({ isUploading, uploadProgress, onFileUpload, logDataCount, u
 
 export default UploadPage;
 
+=======
+// components/Upload/UploadPage.jsx
+import React from 'react';
+import { Upload, AlertCircle } from 'lucide-react';
+
+const UploadPage = ({ isUploading, uploadProgress, onFileUpload, logDataCount }) => (
+  <div className="bg-white rounded-lg shadow-sm p-6">
+    <h2 className="text-xl font-semibold mb-4">อัปโหลดไฟล์ Log</h2>
+    
+    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+      <div className="mb-4">
+        <p className="text-lg font-medium text-gray-900 mb-2">
+          เลือกไฟล์ .txt ที่ต้องการอัปโหลด
+        </p>
+        <p className="text-gray-600">
+          รองรับไฟล์ขนาดสูงสุด 50MB
+        </p>
+      </div>
+      
+      <input
+        type="file"
+        accept=".txt"
+        onChange={onFileUpload}
+        className="hidden"
+        id="file-upload"
+      />
+      <label
+        htmlFor="file-upload"
+        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors"
+      >
+        เลือกไฟล์
+      </label>
+    </div>
+
+    {isUploading && (
+      <div className="mt-4">
+        <div className="flex justify-between text-sm text-gray-600 mb-1">
+          <span>กำลังอัปโหลด...</span>
+          <span>{uploadProgress}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${uploadProgress}%` }}
+          ></div>
+        </div>
+      </div>
+    )}
+
+    {logDataCount > 0 && (
+      <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center gap-2 text-green-800">
+          <AlertCircle className="w-5 h-5" />
+          <span className="font-medium">ข้อมูลพร้อมใช้งาน</span>
+        </div>
+        <p className="text-green-700 mt-1">
+          โหลดข้อมูลสำเร็จ {logDataCount} รายการ
+        </p>
+      </div>
+    )}
+  </div>
+);
+
+export default UploadPage;
+>>>>>>> dccf88c7 (update case)

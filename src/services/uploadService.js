@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // src/services/uploadService.js - Refactored for Robustness and Performance
 import apiService from './apiService.js';
 import * as XLSX from 'xlsx';
@@ -393,3 +394,277 @@ class EnhancedUploadService {
 }
 
 export default new EnhancedUploadService();
+=======
+// services/uploadService.js - Updated for Real Data (Fixed Import)
+import apiService from './apiService.js'; // Now works because apiService.js exports default
+import { parseLogFile } from '../utils/dataProcessing.js';
+
+class UploadService {
+  constructor() {
+    this.useRealAPI = import.meta.env.VITE_ENABLE_SAMPLE_DATA !== 'true';
+  }
+
+  async uploadFile(file, progressCallback) {
+    if (this.useRealAPI) {
+      return this.uploadToAPI(file, progressCallback);
+    } else {
+      return this.simulateUpload(file, progressCallback);
+    }
+  }
+
+  // Real API upload
+  async uploadToAPI(file, progressCallback) {
+    try {
+      console.log('🔄 Uploading to real API...');
+      
+      progressCallback(10);
+      
+      // Check file size
+      const maxSize = parseInt(import.meta.env.VITE_MAX_LOG_FILE_SIZE) || 52428800;
+      if (file.size > maxSize) {
+        throw new Error(`ไฟล์มีขนาดใหญ่เกินไป (สูงสุด ${Math.round(maxSize / 1024 / 1024)}MB)`);
+      }
+
+      progressCallback(20);
+
+      // Upload file to API
+      const result = await apiService.uploadLogFile(file, (progress) => {
+        // API progress is 0-100, but we want to show 20-90 during upload
+        const adjustedProgress = 20 + (progress * 0.7);
+        progressCallback(Math.round(adjustedProgress));
+      });
+
+      progressCallback(95);
+
+      // Wait a moment for database processing
+      await this.delay(500);
+      
+      progressCallback(100);
+
+      return {
+        success: true,
+        recordCount: result.recordCount || 0,
+        message: result.message || 'อัปโหลดสำเร็จ',
+        data: null // API handles data storage
+      };
+
+    } catch (error) {
+      console.error('❌ API upload failed:', error);
+      
+      // Fallback to simulation if API fails
+      console.log('🔄 Falling back to simulation...');
+      return this.simulateUpload(file, progressCallback);
+    }
+  }
+
+  // Simulated upload (for development/demo)
+  async simulateUpload(file, progressCallback) {
+    try {
+      console.log('🔄 Simulating upload...');
+      
+      progressCallback(10);
+
+      // Validate file type
+      const allowedTypes = ['txt', 'log', 'csv'];
+      const fileExt = file.name.split('.').pop().toLowerCase();
+      
+      if (!allowedTypes.includes(fileExt)) {
+        throw new Error('ประเภทไฟล์ไม่ถูกต้อง รองรับเฉพาะ .txt, .log, .csv');
+      }
+
+      progressCallback(30);
+
+      // Read and parse file content
+      const content = await this.readFileContent(file);
+      progressCallback(50);
+
+      // Parse log data
+      const parsedData = parseLogFile(content);
+      progressCallback(70);
+
+      // Simulate processing time
+      await this.delay(1000);
+      progressCallback(90);
+
+      // Final delay
+      await this.delay(500);
+      progressCallback(100);
+
+      return {
+        success: true,
+        recordCount: parsedData.length,
+        message: 'จำลองการอัปโหลดสำเร็จ',
+        data: parsedData
+      };
+
+    } catch (error) {
+      throw new Error(`การอัปโหลดล้มเหลว: ${error.message}`);
+    }
+  }
+
+  // Read file content
+  readFileContent(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        resolve(e.target.result);
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
+      };
+      
+      reader.readAsText(file);
+    });
+  }
+
+  // Utility function for delays
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Validate file before upload
+  validateFile(file) {
+    const errors = [];
+
+    // Check if file exists
+    if (!file) {
+      errors.push('ไม่มีไฟล์ที่เลือก');
+      return errors;
+    }
+
+    // Check file size
+    const maxSize = parseInt(import.meta.env.VITE_MAX_LOG_FILE_SIZE) || 52428800; // 50MB default
+    if (file.size > maxSize) {
+      errors.push(`ไฟล์มีขนาดใหญ่เกินไป (สูงสุด ${Math.round(maxSize / 1024 / 1024)}MB)`);
+    }
+
+    // Check file type
+    const allowedTypes = ['txt', 'log', 'csv'];
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedTypes.includes(fileExt)) {
+      errors.push('ประเภทไฟล์ไม่ถูกต้อง รองรับเฉพาะ .txt, .log, .csv');
+    }
+
+    // Check if file is empty
+    if (file.size === 0) {
+      errors.push('ไฟล์ว่างเปล่า');
+    }
+
+    return errors;
+  }
+
+  // Get file info
+  getFileInfo(file) {
+    if (!file) return null;
+
+    return {
+      name: file.name,
+      size: file.size,
+      sizeFormatted: this.formatFileSize(file.size),
+      type: file.type,
+      extension: file.name.split('.').pop().toLowerCase(),
+      lastModified: new Date(file.lastModified)
+    };
+  }
+
+  // Format file size for display
+  formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // Check if API is available
+  async checkAPIStatus() {
+    try {
+      const status = await apiService.checkHealth();
+      return status.status === 'ok';
+    } catch (error) {
+      console.warn('API health check failed:', error);
+      return false;
+    }
+  }
+
+  // Get upload statistics
+  async getUploadStats() {
+    try {
+      if (this.useRealAPI) {
+        return await apiService.getUploadStats();
+      } else {
+        // Return mock stats for simulation mode
+        return {
+          totalFiles: 42,
+          totalRecords: 15847,
+          lastUpload: new Date().toISOString(),
+          avgProcessingTime: 2.3
+        };
+      }
+    } catch (error) {
+      console.error('Failed to get upload stats:', error);
+      return null;
+    }
+  }
+
+  // Batch upload multiple files
+  async uploadMultipleFiles(files, progressCallback) {
+    const results = [];
+    const totalFiles = files.length;
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      console.log(`🔄 Uploading file ${i + 1}/${totalFiles}: ${file.name}`);
+      
+      try {
+        const result = await this.uploadFile(file, (fileProgress) => {
+          // Calculate overall progress
+          const fileWeight = 100 / totalFiles;
+          const overallProgress = (i * fileWeight) + (fileProgress * fileWeight / 100);
+          progressCallback(Math.round(overallProgress));
+        });
+        
+        results.push({
+          file: file.name,
+          success: true,
+          result
+        });
+        
+      } catch (error) {
+        results.push({
+          file: file.name,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    progressCallback(100);
+    return results;
+  }
+
+  // Clean up old uploads (for demo/dev mode)
+  async cleanupOldUploads() {
+    try {
+      if (this.useRealAPI) {
+        return await apiService.request('/api/cleanup', {
+          method: 'POST'
+        });
+      } else {
+        console.log('🧹 Simulating cleanup...');
+        return { cleaned: 0, message: 'Cleanup simulated' };
+      }
+    } catch (error) {
+      console.error('Cleanup failed:', error);
+      throw error;
+    }
+  }
+}
+
+export default new UploadService();
+>>>>>>> dccf88c7 (update case)

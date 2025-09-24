@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // src/App.jsx - Updated with Enhanced Upload for Large Files
 import React, { useState, useEffect } from 'react';
 import aiService from './services/aiService.js';
@@ -742,4 +743,419 @@ const App = () => (
   </ErrorBoundary>
 );
 
+=======
+// src/App.jsx - Complete Integration with Security Analytics
+import React, { useState, useEffect } from 'react';
+import aiService from './services/aiService.js';
+import Header from './components/Layout/Header';
+import NavigationTabs from './components/Layout/NavigationTabs';
+import UploadPage from './components/Upload/UploadPage';
+import DashboardPage from './components/Dashboard/DashboardPage';
+import ChatPage from './components/Chat/ChatPage';
+import SecurityDashboard from './components/Security/SecurityDashboard';
+import SecurityAlerts from './components/Security/SecurityAlerts';
+import { useLogData } from './hooks/useLogData';
+import { useFilters } from './hooks/useFilters';
+import { useChat } from './hooks/useChat';
+import { useUpload } from './hooks/useUpload';
+
+const AccessLogAnalyzer = () => {
+  const [activeTab, setActiveTab] = useState('upload');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Custom hooks
+  const { logData, filteredData, stats, chartData } = useLogData();
+  const { filters, handleFilterChange } = useFilters(logData);
+  const { chatMessages, currentMessage, setCurrentMessage, handleSendMessage, isAnalyzing } = useChat(stats);
+  const { isUploading, uploadProgress, handleFileUpload } = useUpload();
+
+  // ตรวจสอบ AI Service เมื่อเริ่มต้น
+  useEffect(() => {
+    const checkAIStatus = async () => {
+      try {
+        setIsLoading(true);
+        const status = await aiService.checkAvailability();
+        console.log('✅ AI Service Status:', status);
+        setError(null);
+      } catch (error) {
+        console.warn('⚠️ AI Service check failed:', error);
+        setError('AI Service ไม่พร้อมใช้งาน - บางฟีเจอร์อาจไม่ทำงาน');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkAIStatus();
+  }, []);
+
+  // Error boundary handler
+  const handleError = (error, errorInfo) => {
+    console.error('Application Error:', error, errorInfo);
+    setError('เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง');
+  };
+
+  // Clear error function
+  const clearError = () => {
+    setError(null);
+  };
+
+  // Export comprehensive report including security data
+  const exportReport = async () => {
+    try {
+      setIsLoading(true);
+      
+      const report = `รายงานการวิเคราะห์ Access Log ฉบับสมบูรณ์
+========================================================
+
+📊 สถิติรวม:
+- การเข้าถึงทั้งหมด: ${stats.totalAccess || 0} ครั้ง
+- การเข้าถึงสำเร็จ: ${stats.successfulAccess || 0} ครั้ง (${stats.totalAccess ? ((stats.successfulAccess/stats.totalAccess)*100).toFixed(1) : 0}%)
+- การเข้าถึงถูกปฏิเสธ: ${stats.deniedAccess || 0} ครั้ง (${stats.totalAccess ? ((stats.deniedAccess/stats.totalAccess)*100).toFixed(1) : 0}%)
+- ผู้ใช้ที่ไม่ซ้ำ: ${stats.uniqueUsers || 0} คน
+
+📍 การเข้าถึงตามสถานที่:
+${chartData.locationData?.map(item => `- ${item.name}: ${item.value} ครั้ง`).join('\n') || 'ไม่มีข้อมูล'}
+
+🕐 การเข้าถึงตามช่วงเวลา:
+${chartData.timeData?.map(item => `- ${item.name}: ${item.value} ครั้ง`).join('\n') || 'ไม่มีข้อมูล'}
+
+💬 ประวัติการสนทนากับ AI:
+${chatMessages.length > 0 ? 
+  chatMessages.map(msg => `${msg.type === 'user' ? '👤 คำถาม' : '🤖 คำตอบ'}: ${msg.content}`).join('\n\n') : 
+  'ยังไม่มีการสนทนากับ AI'
+}
+
+🚨 ข้อมูลด้านความปลอดภัย:
+- สำหรับข้อมูลความผิดปกติและการแจ้งเตือนด้านความปลอดภัย
+- กรุณาดูในแท็บ "การวิเคราะห์" สำหรับรายละเอียดเพิ่มเติม
+
+📋 ข้อมูลการสร้างรายงาน:
+- สร้างรายงานเมื่อ: ${new Date().toLocaleString('th-TH')}
+- ข้อมูลที่วิเคราะห์: ${logData.length} รายการ
+- สถานะ AI Service: ${error ? 'ไม่พร้อมใช้งาน' : 'พร้อมใช้งาน'}
+
+========================================================
+รายงานนี้สร้างโดยระบบ Access Log Analyzer
+`;
+
+      const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `access-log-report-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      console.log('✅ Report exported successfully');
+    } catch (exportError) {
+      console.error('❌ Export failed:', exportError);
+      setError('ไม่สามารถส่งออกรายงานได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Tab change handler with error clearing
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    clearError(); // Clear errors when switching tabs
+    
+    // Analytics tracking
+    if (typeof window !== 'undefined' && window.gtag) {
+      window.gtag('event', 'tab_change', {
+        event_category: 'navigation',
+        event_label: tabId
+      });
+    }
+  };
+
+  // Render main content based on active tab
+  const renderContent = () => {
+    try {
+      switch (activeTab) {
+        case 'upload':
+          return (
+            <UploadPage
+              isUploading={isUploading}
+              uploadProgress={uploadProgress}
+              onFileUpload={handleFileUpload}
+              logDataCount={logData.length}
+              onError={setError}
+            />
+          );
+          
+        case 'dashboard':
+          return (
+            <DashboardPage
+              filteredData={filteredData}
+              stats={stats}
+              chartData={chartData}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onExportReport={exportReport}
+              isLoading={isLoading}
+              onError={setError}
+            />
+          );
+          
+        case 'chat':
+          return (
+            <ChatPage
+              chatMessages={chatMessages}
+              currentMessage={currentMessage}
+              setCurrentMessage={setCurrentMessage}
+              onSendMessage={handleSendMessage}
+              isAnalyzing={isAnalyzing}
+              isAIAvailable={!error}
+              onError={setError}
+            />
+          );
+          
+        case 'analytics':
+          return (
+            <div className="space-y-6">
+              {/* Analytics Header */}
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                      <span className="mr-3">🛡️</span>
+                      การวิเคราะห์ความปลอดภัย
+                    </h1>
+                    <p className="text-gray-600 mt-1">
+                      วิเคราะห์และติดตามความผิดปกติในระบบการเข้า-ออก
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm text-gray-500">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span>อัปเดตแบบเรียลไทม์</span>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-3">📊</span>
+                      <div>
+                        <p className="text-sm font-medium text-blue-600">เหตุการณ์ทั้งหมด</p>
+                        <p className="text-2xl font-bold text-blue-700">{stats.totalAccess || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-3">✅</span>
+                      <div>
+                        <p className="text-sm font-medium text-green-600">การเข้าถึงสำเร็จ</p>
+                        <p className="text-2xl font-bold text-green-700">{stats.successfulAccess || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-3">🚫</span>
+                      <div>
+                        <p className="text-sm font-medium text-red-600">การเข้าถึงถูกปฏิเสธ</p>
+                        <p className="text-2xl font-bold text-red-700">{stats.deniedAccess || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-3">👥</span>
+                      <div>
+                        <p className="text-sm font-medium text-purple-600">ผู้ใช้ที่ไม่ซ้ำ</p>
+                        <p className="text-2xl font-bold text-purple-700">{stats.uniqueUsers || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Components */}
+              <SecurityDashboard logData={logData} stats={stats} />
+              <SecurityAlerts logData={logData} />
+            </div>
+          );
+          
+        default:
+          return (
+            <div className="text-center py-12">
+              <span className="text-4xl mb-4 block">🤔</span>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                ไม่พบหน้าที่คุณต้องการ
+              </h3>
+              <p className="text-gray-600 mb-4">
+                กรุณาเลือกแท็บที่ต้องการจากด้านบน
+              </p>
+              <button
+                onClick={() => handleTabChange('upload')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                กลับไปหน้าอัปโหลด
+              </button>
+            </div>
+          );
+      }
+    } catch (renderError) {
+      console.error('❌ Content render error:', renderError);
+      return (
+        <div className="text-center py-12">
+          <span className="text-4xl mb-4 block">❌</span>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            เกิดข้อผิดพลาดในการแสดงผล
+          </h3>
+          <p className="text-gray-600 mb-4">
+            กรุณาลองรีเฟรชหน้าเว็บหรือติดต่อผู้ดูแลระบบ
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            รีเฟรชหน้า
+          </button>
+        </div>
+      );
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        {/* Global Error Banner */}
+        {error && (
+          <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-yellow-800">
+                    เกิดข้อผิดพลาด
+                  </p>
+                  <p className="text-sm text-yellow-700">
+                    {error}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={clearError}
+                className="text-yellow-400 hover:text-yellow-600 transition-colors"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Global Loading Overlay */}
+        {isLoading && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+              <div className="flex items-center">
+                <svg className="animate-spin h-5 w-5 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                </svg>
+                <span className="text-gray-900">กำลังประมวลผล...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <NavigationTabs 
+          activeTab={activeTab} 
+          setActiveTab={handleTabChange}
+        />
+        
+        {/* Main Content */}
+        <main role="main" aria-label="เนื้อหาหลัก">
+          {renderContent()}
+        </main>
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <div>
+              <p>© 2024 Access Log Analyzer - ระบบวิเคราะห์การเข้า-ออก</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className={`flex items-center ${error ? 'text-red-500' : 'text-green-500'}`}>
+                <div className={`w-2 h-2 rounded-full mr-2 ${error ? 'bg-red-400' : 'bg-green-400'}`}></div>
+                {error ? 'ระบบมีปัญหา' : 'ระบบทำงานปกติ'}
+              </span>
+              <span>📊 ข้อมูล: {logData.length} รายการ</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+// Error Boundary Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error Boundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <span className="text-6xl mb-4 block">💥</span>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              เกิดข้อผิดพลาดที่ไม่คาดคิด
+            </h1>
+            <p className="text-gray-600 mb-6">
+              กรุณารีเฟรชหน้าเว็บหรือติดต่อผู้ดูแลระบบ
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              รีเฟรชหน้า
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Wrap main component with Error Boundary
+const App = () => (
+  <ErrorBoundary>
+    <AccessLogAnalyzer />
+  </ErrorBoundary>
+);
+
+>>>>>>> dccf88c7 (update case)
 export default App;

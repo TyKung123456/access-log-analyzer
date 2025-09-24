@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // frontend/services/apiService.js - Improved with Timeouts and Better Error Handling
 
 class ApiService {
@@ -217,3 +218,181 @@ class ApiService {
 
 const apiService = new ApiService();
 export default apiService;
+=======
+// frontend/services/apiService.js
+
+class ApiService {
+  constructor() {
+    // กำหนด BASE_URL จากตัวแปรสภาพแวดล้อม หรือใช้ localhost:3001 เป็นค่าเริ่มต้น
+    this.BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+  }
+
+  /**
+   * ส่งคำขอ HTTP ไปยัง API
+   * @param {string} endpoint - เส้นทาง API (เช่น '/api/logs')
+   * @param {string} method - เมธอด HTTP (GET, POST, PUT, DELETE)
+   * @param {object} [data=null] - ข้อมูลที่จะส่งไปกับคำขอ (สำหรับ POST, PUT)
+   * @param {object} [params=null] - พารามิเตอร์ Query (สำหรับ GET)
+   * @returns {Promise<object>} - ผลลัพษ์จาก API
+   */
+  async request(endpoint, method = 'GET', data = null, params = null) {
+    let url = `${this.BASE_URL}${endpoint}`;
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    };
+
+    if (params) {
+      const query = new URLSearchParams(params).toString();
+      url = `${url}?${query}`;
+    }
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      console.log(`GET ${url}`); // Log URL ที่กำลังเรียก
+      const response = await fetch(url, options);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+      }
+
+      // ตรวจสอบว่า response มี content หรือไม่ก่อนที่จะเรียก .json()
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      } else if (contentType && (contentType.includes('text/csv') || contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))) {
+        // สำหรับการส่งออกไฟล์ ให้คืนค่าเป็น Blob
+        return await response.blob();
+      } else {
+        // กรณีไม่มี content หรือ content type อื่นๆ
+        return response.text();
+      }
+
+    } catch (error) {
+      console.error(`API Request failed: ${endpoint}`, error);
+      throw error;
+    }
+  }
+
+  // ============== API Endpoints ==============
+
+  // Health Check
+  async healthCheck() {
+    return this.request('/api/health');
+  }
+
+  // Logs
+  async getLogs(params) {
+    return this.request('/api/logs', 'GET', null, params);
+  }
+
+  async getLogById(id) {
+    return this.request(`/api/logs/${id}`);
+  }
+
+  async updateLog(id, data) {
+    return this.request(`/api/logs/${id}`, 'PUT', data);
+  }
+
+  async deleteLogs(ids) {
+    return this.request('/api/logs', 'DELETE', { ids });
+  }
+
+  // Filter Options (Locations, Directions, User Types)
+  async getLocations() {
+    return this.request('/api/logs/locations'); // นี่คือบรรทัดที่สำคัญที่ต้องมี /api prefix
+  }
+
+  async getDirections() {
+    return this.request('/api/logs/directions'); // นี่คือบรรทัดที่สำคัญที่ต้องมี /api prefix
+  }
+
+  async getUserTypes() {
+    return this.request('/api/logs/user-types'); // นี่คือบรรทัดที่สำคัญที่ต้องมี /api prefix
+  }
+
+  async getDevices() {
+    return this.request('/api/logs/devices');
+  }
+
+  // Stats
+  async getStats(params) {
+    return this.request('/api/stats', 'GET', null, params);
+  }
+
+  async getDailyStats(params) {
+    return this.request('/api/stats/daily', 'GET', null, params);
+  }
+
+  async getHourlyStats(params) {
+    return this.request('/api/stats/hourly', 'GET', null, params);
+  }
+
+  async getLocationStats(params) {
+    return this.request('/api/stats/locations', 'GET', null, params);
+  }
+
+  async getUserActivityStats(params) {
+    return this.request('/api/stats/user-activity', 'GET', null, params);
+  }
+
+  async getDeviceStats(params) {
+    return this.request('/api/stats/devices', 'GET', null, params);
+  }
+
+  async getMonthlyStats(params) {
+    return this.request('/api/stats/monthly', 'GET', null, params);
+  }
+
+  async getSecurityAlerts(params) {
+    return this.request('/api/stats/security-alerts', 'GET', null, params);
+  }
+
+  // Charts
+  async getChartData(type, params) {
+    return this.request(`/api/charts/${type}`, 'GET', null, params);
+  }
+
+  // Upload
+  async uploadLogFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return fetch(`${this.BASE_URL}/api/upload-log`, {
+      method: 'POST',
+      body: formData,
+    }).then(response => {
+      if (!response.ok) {
+        return response.json().then(errorData => {
+          throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+        });
+      }
+      return response.json();
+    }).catch(error => {
+      console.error('Upload API Request failed:', error);
+      throw error;
+    });
+  }
+
+  async getUploadStats() {
+    return this.request('/api/upload-log/stats');
+  }
+
+  async getUploadHistory(params) {
+    return this.request('/api/upload-log/history', 'GET', null, params);
+  }
+
+  // Export
+  async exportData(format, params) {
+    return this.request(`/api/export/${format}`, 'GET', null, params);
+  }
+}
+
+const apiService = new ApiService();
+export default apiService;
+>>>>>>> dccf88c7 (update case)
